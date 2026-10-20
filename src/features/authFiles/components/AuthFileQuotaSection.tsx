@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   captureQuotaCacheGeneration,
@@ -9,6 +9,7 @@ import {
 import type { AuthFileItem, ClaudeQuotaState } from '@/types';
 import { getStatusFromError, resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
+import { runQuotaFetch } from '@/services/api/apiCall';
 import { isRuntimeOnlyAuthFile, type QuotaProviderType } from '@/features/authFiles/constants';
 import { Button } from '@/components/ui/Button';
 import { IconRefreshCw } from '@/components/ui/icons';
@@ -62,7 +63,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     (state) => state[adapter.storeSetter] as unknown as QuotaMapUpdater
   );
 
-  const refreshQuotaForFile = useCallback(async () => {
+  const refreshQuotaForFile = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
     if (file.disabled) return;
@@ -76,13 +77,15 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     }));
 
     try {
-      const data = await adapter.fetchQuota(file, t);
+      const data = await runQuotaFetch(options?.force === true, () => adapter.fetchQuota(file, t));
       commitIfQuotaCacheCurrent(cacheGeneration, () => {
         updateQuotaState((prev) => ({
           ...prev,
           [cacheKey]: adapter.buildSuccessState(data),
         }));
-        showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
+        if (!options?.silent) {
+          showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
+        }
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('common.unknown_error');
@@ -92,10 +95,12 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
           ...prev,
           [cacheKey]: adapter.buildErrorState(message, status),
         }));
-        showNotification(
-          t('auth_files.quota_refresh_failed', { name: file.name, message }),
-          'error'
-        );
+        if (!options?.silent) {
+          showNotification(
+            t('auth_files.quota_refresh_failed', { name: file.name, message }),
+            'error'
+          );
+        }
       });
     }
   }, [
@@ -109,6 +114,20 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     t,
     updateQuotaState,
   ]);
+
+  // 进入认证文件页时自动加载一次额度（读后端缓存，不强制打上游）。
+  // 已加载或已报错的凭证不重复请求，手动按钮仍会 force 真查。
+  const autoLoadedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    autoLoadedKeyRef.current = null;
+  }, [cacheKey]);
+  useEffect(() => {
+    if (autoLoadedKeyRef.current === cacheKey) return;
+    if (disableControls || file.disabled || isRuntimeOnlyAuthFile(file)) return;
+    if (quota) return;
+    autoLoadedKeyRef.current = cacheKey;
+    void refreshQuotaForFile({ force: false, silent: true });
+  }, [cacheKey, disableControls, file, quota, refreshQuotaForFile]);
 
   const resetQuotaForFile = useCallback(() => {
     if (disableControls) return;
@@ -198,7 +217,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         <button
           type="button"
           className={`${styles.quotaMessage} ${styles.quotaMessageAction}`}
-          onClick={() => void refreshQuotaForFile()}
+          onClick={() => void refreshQuotaForFile({ force: true })}
           disabled={!canRefreshQuota}
         >
           {t(`${adapter.i18nPrefix}.idle`)}
@@ -224,7 +243,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
               variant="secondary"
               size="sm"
               className={styles.quotaResetCreditButton}
-              onClick={() => void refreshQuotaForFile()}
+              onClick={() => void refreshQuotaForFile({ force: true })}
               disabled={!canRefreshQuota || quotaStatus === 'loading'}
               loading={quotaStatus === 'loading'}
               title={t('auth_files.quota_refresh_hint')}
