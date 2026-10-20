@@ -113,7 +113,8 @@ export const resetPluginQuotaRouteCache = () => {
 
 export const fetchPluginQuota = async (
   file: AuthFileItem,
-  t: TFunction
+  t: TFunction,
+  options?: { force?: boolean }
 ): Promise<PluginQuotaData> => {
   const authIndex = normalizeAuthIndex(file.authIndex ?? file['auth_index']);
   if (!authIndex) throw new Error(t('plugin_quota.missing_auth_index'));
@@ -129,8 +130,9 @@ export const fetchPluginQuota = async (
   }
   if (!pluginId) throw new Error(t('plugin_quota.plugin_not_found', { provider }));
 
+  const forceQuery = options?.force ? '?force=1' : '';
   const payload = await apiClient.post<PluginQuotaPayload>(
-    `/plugins/${encodeURIComponent(pluginId)}/quota`,
+    `/plugins/${encodeURIComponent(pluginId)}/quota${forceQuery}`,
     { auth_index: authIndex }
   );
   return {

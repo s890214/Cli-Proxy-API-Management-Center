@@ -76,12 +76,32 @@ export const getApiCallErrorMessage = (result: ApiCallResult): string => {
   return message || 'Request failed';
 };
 
+/**
+ * 手动刷新配额时置位：api-call 会带上强制穿透头，让 CPA 跳过配额缓存真查上游。
+ * 进页面/自动加载不会置位，因此读的是后端缓存（与 Keeper、认证文件页同一份数据）。
+ */
+let quotaForceDepth = 0;
+
+export const runQuotaFetch = async <T>(force: boolean, task: () => Promise<T>): Promise<T> => {
+  if (!force) return task();
+  quotaForceDepth += 1;
+  try {
+    return await task();
+  } finally {
+    quotaForceDepth -= 1;
+  }
+};
+
 export const apiCallApi = {
   request: async (payload: ApiCallRequest, config?: AxiosRequestConfig): Promise<ApiCallResult> => {
+    const headers =
+      quotaForceDepth > 0
+        ? { ...(config?.headers ?? {}), 'X-CPA-Quota-Force': '1' }
+        : config?.headers;
     const response = await apiClient.post<Record<string, unknown>>(
       '/requests/api-call',
       payload,
-      config
+      { ...config, headers }
     );
     const statusCode = Number(response?.status_code ?? 0);
     const header = (response?.header ?? {}) as Record<string, string[]>;
