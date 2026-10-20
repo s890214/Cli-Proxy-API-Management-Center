@@ -24,6 +24,8 @@ import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
+import { QuotaAutoRefreshBar } from './components/QuotaAutoRefreshBar';
+import { quotaAutoRefreshApi, type QuotaAutoRefreshState } from '@/services/api/quotaAutoRefresh';
 import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
 import {
@@ -62,12 +64,30 @@ const SKELETON_CARD_COUNT = 6;
  */
 const displayNameFor = (name: string) => name;
 
+function entryAuthIndex(entry: QuotaFileEntry): string {
+  const raw = entry.file.authIndex;
+  if (raw === null || raw === undefined) return '';
+  return String(raw).trim();
+}
+
+function isIndexAutoRefreshDisabled(
+  state: QuotaAutoRefreshState | null,
+  entry: QuotaFileEntry
+): boolean {
+  const index = entryAuthIndex(entry);
+  // 没有 auth index 的卡片无法定位，按「不参与自动刷新」处理
+  if (!index) return true;
+  // disabled_indices 可能为 null（Go 的 nil slice 序列化）
+  return state?.disabled_indices?.includes(index) ?? true;
+}
+
 export function QuotaPage() {
   const { t } = useTranslation();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
   const [files, setFiles] = useState<AuthFileItem[]>([]);
+  const [autoRefreshState, setAutoRefreshState] = useState<QuotaAutoRefreshState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<QuotaTabId>(() => readQuotaUiState()?.tab ?? 'all');
@@ -253,23 +273,63 @@ export function QuotaPage() {
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
   const { resettingQuotaName, refreshQuota, resetQuota } = useQuotaActions(disableControls);
 
-  const pendingRefreshRef = useRef<number | null>(null);
+  const pendingRefreshRef = useRef<{ session: number; force: boolean } | null>(null);
   const prevLoadingRef = useRef(loading);
 
   // 刷新全部：先重取文件列表，待其落定（loading 下降沿）再批量拉当前页额度
+  const toggleAutoRefresh = useCallback(
+    async (entry: QuotaFileEntry, next: boolean) => {
+      const index = entryAuthIndex(entry);
+      if (!index || !autoRefreshState) return;
+      const disabled = new Set(autoRefreshState.disabled_indices ?? []);
+      if (next) {
+        disabled.delete(index);
+      } else {
+        disabled.add(index);
+      }
+      try {
+        const updated = await quotaAutoRefreshApi.update({
+          disabled_indices: Array.from(disabled),
+        });
+        setAutoRefreshState(updated);
+      } catch {
+        // 保存失败时不改动本地状态，交给下一次读取纠正
+      }
+    },
+    [autoRefreshState]
+  );
+
   const handleRefreshAll = useCallback(() => {
     if (disableControls) return;
-    pendingRefreshRef.current = sessionGeneration;
+    pendingRefreshRef.current = { session: sessionGeneration, force: true };
     void loadFiles();
   }, [disableControls, loadFiles, sessionGeneration]);
+
+  // 进入页面/切换标签/翻页时，自动加载「还没有数据」的凭证：不带 force，读后端缓存
+  // （秒回，不打上游）。已加载或已报错的卡片不重复请求，手动点「刷新额度」才强制真查。
+  const autoLoadedKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (disableControls || loading || batchLoading) return;
+    const pending = pageItems.filter((entry) => {
+      const cacheKey = getQuotaCacheKey(entry.file);
+      if (autoLoadedKeysRef.current.has(cacheKey)) return false;
+      const state = getQuota(entry);
+      return !state || state.status === 'idle';
+    });
+    if (pending.length === 0) return;
+    for (const entry of pending) {
+      autoLoadedKeysRef.current.add(getQuotaCacheKey(entry.file));
+    }
+    void loadQuota(pending);
+  }, [batchLoading, disableControls, getQuota, loadQuota, loading, pageItems]);
 
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
     prevLoadingRef.current = loading;
 
-    const requestedSession = pendingRefreshRef.current;
-    if (requestedSession === null) return;
-    if (requestedSession !== sessionGeneration) {
+    const requested = pendingRefreshRef.current;
+    if (requested === null) return;
+    if (requested.session !== sessionGeneration) {
       pendingRefreshRef.current = null;
       return;
     }
@@ -278,14 +338,14 @@ export function QuotaPage() {
     pendingRefreshRef.current = null;
     if (
       canRefreshQuotaAfterList(
-        requestedSession,
+        requested.session,
         sessionGeneration,
         filesGeneration,
         Boolean(error),
         disableControls
       )
     ) {
-      void loadQuota(pageItems);
+      void loadQuota(pageItems, { force: requested.force });
     }
   }, [disableControls, error, filesGeneration, loading, loadQuota, pageItems, sessionGeneration]);
 
@@ -333,6 +393,8 @@ export function QuotaPage() {
         disableControls={disableControls}
         onRefreshAll={handleRefreshAll}
       />
+
+      <QuotaAutoRefreshBar onChange={setAutoRefreshState} />
 
       <section className={styles.workbench}>
         {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
@@ -437,6 +499,9 @@ export function QuotaPage() {
                 entranceDelayMs={cardEntranceDelay(index)}
                 onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
                 onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                autoRefreshEnabled={!isIndexAutoRefreshDisabled(autoRefreshState, entry)}
+                autoRefreshLocked={!autoRefreshState?.enabled}
+                onToggleAutoRefresh={(next) => void toggleAutoRefresh(entry, next)}
               />
             ))}
           </div>

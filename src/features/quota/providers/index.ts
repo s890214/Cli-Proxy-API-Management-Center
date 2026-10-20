@@ -39,7 +39,11 @@ export interface QuotaAdapter {
   type: QuotaProviderType;
   i18nPrefix: string;
   filterFn: (file: AuthFileItem) => boolean;
-  fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
+  fetchQuota: (
+    file: AuthFileItem,
+    t: TFunction,
+    options?: { force?: boolean }
+  ) => Promise<unknown>;
   enrichQuota?: (file: AuthFileItem, data: unknown, t: TFunction) => Promise<unknown>;
   resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
   canResetQuota?: (quota: QuotaCardState) => boolean;
