@@ -49,6 +49,11 @@ export type QuotaCardProps = {
   creditOverageSharedCount?: number;
   onRefresh: () => void;
   onReset: () => void;
+  /** 该账号是否参与自动刷新（未被单独关闭） */
+  autoRefreshEnabled?: boolean;
+  /** 全局开关关闭时为 true，单项开关置灰 */
+  autoRefreshLocked?: boolean;
+  onToggleAutoRefresh?: (next: boolean) => void;
 };
 
 export function QuotaCard(props: QuotaCardProps) {
@@ -64,6 +69,9 @@ export function QuotaCard(props: QuotaCardProps) {
     creditOverageSharedCount = 1,
     onRefresh,
     onReset,
+    autoRefreshEnabled,
+    autoRefreshLocked,
+    onToggleAutoRefresh,
   } = props;
   const { t } = useTranslation();
   const adapter = QUOTA_ADAPTERS[entry.type];
@@ -166,18 +174,53 @@ export function QuotaCard(props: QuotaCardProps) {
         <span className={styles.fileName} title={displayName}>
           {displayName}
         </span>
-        {glance !== undefined && (
-          <button
-            type="button"
-            className={styles.glanceToggle}
-            onClick={onToggleGlance}
-            aria-expanded={!glance}
-            aria-label={`${t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}: ${displayName}`}
-            title={t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}
-          >
-            <IconChevronDown size={14} />
-          </button>
-        )}
+        <div
+          style={{
+            marginLeft: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          {onToggleAutoRefresh ? (
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 11,
+                opacity: autoRefreshLocked ? 0.45 : 1,
+                cursor: autoRefreshLocked ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title={
+                autoRefreshLocked
+                  ? '全局自动刷新已关闭，单项开关不生效'
+                  : '本账号是否参与自动刷新'
+              }
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(autoRefreshEnabled) && !autoRefreshLocked}
+                disabled={autoRefreshLocked}
+                onChange={(event) => onToggleAutoRefresh(event.target.checked)}
+              />
+              自动
+            </label>
+          ) : null}
+          {glance !== undefined && (
+            <button
+              type="button"
+              className={styles.glanceToggle}
+              onClick={onToggleGlance}
+              aria-expanded={!glance}
+              aria-label={`${t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}: ${displayName}`}
+              title={t(glance ? 'card_layout.show_details' : 'card_layout.hide_details')}
+            >
+              <IconChevronDown size={14} />
+            </button>
+          )}
+        </div>
       </header>
 
       <div className={styles.body}>

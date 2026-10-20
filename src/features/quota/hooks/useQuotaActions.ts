@@ -11,6 +11,7 @@ import {
   commitIfQuotaCacheCurrent,
   useNotificationStore,
 } from '@/stores';
+import { runQuotaFetch } from '@/services/api/apiCall';
 import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
@@ -27,7 +28,7 @@ export function useQuotaActions(disableControls: boolean) {
   const [resettingQuotaName, setResettingQuotaName] = useState<string | null>(null);
 
   const refreshQuota = useCallback(
-    async (file: AuthFileItem, adapter: QuotaAdapter) => {
+    async (file: AuthFileItem, adapter: QuotaAdapter, options?: { force?: boolean }) => {
       if (disableControls || file.disabled) return;
       const cacheKey = getQuotaCacheKey(file);
       if (resettingQuotaName === cacheKey) return;
@@ -41,7 +42,10 @@ export function useQuotaActions(disableControls: boolean) {
       }));
 
       try {
-        const data = await adapter.fetchQuota(file, t);
+        const fetchOptions = options ?? { force: true };
+        const data = await runQuotaFetch(fetchOptions.force !== false, () =>
+          adapter.fetchQuota(file, t, fetchOptions)
+        );
         commitIfQuotaCacheCurrent(cacheGeneration, () => {
           const successState = adapter.buildSuccessState(data);
           setQuota((prev) => ({

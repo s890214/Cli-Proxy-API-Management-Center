@@ -1,0 +1,18 @@
+.wrap {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.frame {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  height: calc(100vh - 128px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  background: #fff;
+}

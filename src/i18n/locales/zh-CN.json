@@ -112,7 +112,8 @@
     "plugins": "插件",
     "config_management": "配置面板",
     "logs": "日志查看",
-    "system_info": "中心信息"
+    "system_info": "中心信息",
+    "keeper": "用量统计"
   },
   "nav_groups": {
     "operate": "运行",
@@ -132,7 +133,8 @@
     "plugins": "安装、更新与配置",
     "logs": "请求追踪与排查",
     "config_management": "网关基础配置",
-    "system_info": "运行与诊断信息"
+    "system_info": "运行与诊断信息",
+    "keeper": "Token 消耗、缓存命中、延迟与成本"
   },
   "dashboard": {
     "hero_verdict_good": "运行平稳",
