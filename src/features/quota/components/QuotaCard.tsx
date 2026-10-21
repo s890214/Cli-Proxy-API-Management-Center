@@ -37,11 +37,6 @@ export type QuotaCardProps = {
   entranceDelayMs?: number | null;
   onRefresh: () => void;
   onReset: () => void;
-  /** 该账号是否参与自动刷新（未被单独关闭） */
-  autoRefreshEnabled?: boolean;
-  /** 全局开关关闭时为 true，单项开关置灰 */
-  autoRefreshLocked?: boolean;
-  onToggleAutoRefresh?: (next: boolean) => void;
 };
 
 export function QuotaCard(props: QuotaCardProps) {
@@ -54,9 +49,6 @@ export function QuotaCard(props: QuotaCardProps) {
     entranceDelayMs,
     onRefresh,
     onReset,
-    autoRefreshEnabled,
-    autoRefreshLocked,
-    onToggleAutoRefresh,
   } = props;
   const { t } = useTranslation();
   const adapter = QUOTA_ADAPTERS[entry.type];
@@ -142,33 +134,6 @@ export function QuotaCard(props: QuotaCardProps) {
         <span className={styles.fileName} title={displayName}>
           {displayName}
         </span>
-        {onToggleAutoRefresh ? (
-          <label
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 11,
-              opacity: autoRefreshLocked ? 0.45 : 1,
-              cursor: autoRefreshLocked ? 'not-allowed' : 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-            title={
-              autoRefreshLocked
-                ? '全局自动刷新已关闭，单项开关不生效'
-                : '本账号是否参与自动刷新'
-            }
-          >
-            <input
-              type="checkbox"
-              checked={Boolean(autoRefreshEnabled) && !autoRefreshLocked}
-              disabled={autoRefreshLocked}
-              onChange={(event) => onToggleAutoRefresh(event.target.checked)}
-            />
-            自动
-          </label>
-        ) : null}
       </header>
 
       <div className={styles.body}>
