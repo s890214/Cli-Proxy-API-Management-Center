@@ -25,7 +25,21 @@ const INTERVAL_MIN = 1;
 const INTERVAL_MAX = 60;
 
 function parseMinutes(interval: string | undefined): number {
-  const match = /^(\d+(?:\.\d+)?)\s*(m|s|h)?$/i.exec((interval ?? '').trim());
+  const raw = (interval ?? '').trim();
+  if (!raw) return 5;
+
+  // 后端返回的是 Go 的 time.Duration 字符串，整分钟也会带 "0s" 尾巴
+  // （10m -> "10m0s"，1 小时 -> "1h0m0s"）。先按 Go 的多段格式解析，
+  // 否则会被当成非法值退回默认 5 分钟。
+  const go = /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(raw);
+  if (go && (go[1] || go[2] || go[3])) {
+    const seconds =
+      Number(go[1] ?? 0) * 3600 + Number(go[2] ?? 0) * 60 + Number(go[3] ?? 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return 5;
+    return Math.min(INTERVAL_MAX, Math.max(INTERVAL_MIN, Math.round(seconds / 60)));
+  }
+
+  const match = /^(\d+(?:\.\d+)?)\s*(m|s|h)?$/i.exec(raw);
   if (!match) return 5;
   const value = Number(match[1]);
   const unit = (match[2] ?? 'm').toLowerCase();
