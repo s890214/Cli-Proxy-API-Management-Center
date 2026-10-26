@@ -16,7 +16,12 @@ export function getQuotaCacheKey(file: AuthFileItem): string {
 
 /** Disambiguate same-name cards without ever falling back to account (a secret). */
 export function getQuotaDisplayName(file: AuthFileItem): string {
-  if (!isDevinFile(file) && !isPluginQuotaFile(file)) return file.name;
+  // Plugin quota providers expose one credential per file, so the readable
+  // file name already identifies the account: never append the auth index.
+  if (isPluginQuotaFile(file) && !isDevinFile(file)) {
+    return file.name.replace(/\.json$/i, '');
+  }
+  if (!isDevinFile(file)) return file.name;
   const identity = file.email?.trim() || normalizeRecentRequestAuthIndex(file.authIndex);
   return identity ? `${file.name} · ${identity}` : file.name;
 }
