@@ -98,10 +98,14 @@ const createApiCallApi = (client: Pick<typeof apiClient, 'post'>) => ({
       quotaForceDepth > 0
         ? { ...(config?.headers ?? {}), 'X-CPA-Quota-Force': '1' }
         : config?.headers;
+    const requestConfig =
+      quotaForceDepth > 0
+        ? { ...(config ?? {}), headers }
+        : config;
     const response = await client.post<Record<string, unknown>>(
       '/requests/api-call',
       payload,
-      { ...config, headers }
+      requestConfig
     );
     const statusCode = Number(response?.status_code ?? 0);
     const header = (response?.header ?? {}) as Record<string, string[]>;
